@@ -1,25 +1,41 @@
 #include "main.h"
 
-#define PIN_E220_AUX                                      GPIO_NUM_0
-#define PIN_E220_M0                                       19
-#define PIN_E220_M1                                       21
+#include "soc/rtc_cntl_reg.h"
+#include "soc/rtc.h"
+#include "driver/rtc_io.h"
+
+
+// --------------------------------- LoRa E220 TTL --------------------------------- //
+#define PIN_E220_AUX                                      GPIO_NUM_15
+#define PIN_E220_M0                                       GPIO_NUM_19
+#define PIN_E220_M1                                       GPIO_NUM_21
 
 #define SEND_INTERVAL                                     2000
 
+#define DESTINATION_ADDL                                  3
+
+LoRa_E220 e220ttl(
+    &Serial2,
+    PIN_E220_AUX,
+    PIN_E220_M0,
+    PIN_E220_M1
+);
+
+
+
+// --------------------------------- AJSR04M --------------------------------- //
+
 #define SENSOR_RANGE_MIN                                  20	
 #define SENSOR_RANGE_MAX                                  450
-#define SENSOR_TIMEOUT                                    10
+#define SENSOR_TIMEOUT                                    3
 
 #define PIN_AJSR04M_ECHO                                  5
 #define PIN_AJSR04M_TRIG                                  4
 
-LoRa_E220 e220ttl(
-  &Serial2,
-  PIN_E220_AUX,
-  PIN_E220_M1,              // ATTENTION: M1 and M0 pins are swapped!!
-  PIN_E220_M0
-  );
- 
+
+
+// --------------------------------- APP DATA --------------------------------- //
+
 struct tankData {
   int tank1_level;
   int tank2_level;
@@ -29,8 +45,6 @@ tankData currentTankData = {0, 0};
  
 int measure_distance();
 
-void printWakeUpReason();
-
 
 
 void setup() {
@@ -38,41 +52,40 @@ void setup() {
   pinMode(PIN_AJSR04M_TRIG, OUTPUT);
   pinMode(PIN_AJSR04M_ECHO, INPUT);
   
+
   // --------------- system setup ------------------- //
   Serial.begin(9600);
-  printWakeUpReason();
 
-  delay(2000);
 
-  esp_sleep_enable_ext0_wakeup(PIN_E220_AUX, LOW);
-
-  
- 
   // --------------- lora setup --------------------- //
-  Serial.println("Initializing LoRa module");
   e220ttl.begin();
-
-  delay(2000);
-
-  // lora_set_config(e220ttl);
-  // lora_get_config(e220ttl);
-  
-
   e220ttl.setMode(MODE_2_WOR_RECEIVER);
-  delay(2000);
 
+
+  // ------------- send measurement ----------------- //
+  e220ttl.setMode(MODE_0_NORMAL);
 
   currentTankData.tank1_level = measure_distance();
   currentTankData.tank2_level = 75;
-  ResponseStatus rs = e220ttl.sendMessage(&currentTankData, sizeof(currentTankData));
-  Serial.println("Send status: " + rs.getResponseDescription());
-  delay(2000);
-  Serial.println("Entering deep sleep.");
-  esp_deep_sleep_start();             // enter deep sleep
+  ResponseStatus rs = e220ttl.sendFixedMessage(0, DESTINATION_ADDL, 18, &currentTankData, sizeof(currentTankData));
+
+
+  // ------------- go to sleep ---------------------- //
+  e220ttl.setMode(MODE_2_WOR_RECEIVER);
+  Serial2.end();
+
+  esp_sleep_enable_ext0_wakeup(PIN_E220_AUX, LOW); 
+  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+  gpio_deep_sleep_hold_en();
+
+  esp_deep_sleep_start();
+  delay(100);
+  Serial.println("This will never be printed");
 }
  
-void loop() {
-}
+void loop() {}
+
+
 
 
 
@@ -89,17 +102,14 @@ int measure_distance(){
   while((distance < SENSOR_RANGE_MIN || distance > SENSOR_RANGE_MAX) &&
         retries <= SENSOR_TIMEOUT) {
   
-    Serial.println("Waking up AJ-SR04M module");
     // Sets the trigPin HIGH (ACTIVE) for 1000 microseconds to wake module
     digitalWrite(PIN_AJSR04M_TRIG, HIGH);
     delayMicroseconds(1000);
     digitalWrite(PIN_AJSR04M_TRIG, LOW);
 
-    Serial.println("Read measured distance");
     // Reads the echoPin, returns the sound wave travel time in microseconds
     duration = pulseIn(PIN_AJSR04M_ECHO, HIGH);
-    // Calculating the distance
-    distance = duration * 0.034 / 2; // Speed of sound wave divided by 2 (go and back)
+    distance = duration * 0.034 / 2; // Speed of sound wave divided by 2 (there and back)
 
     // Displays the distance on the Serial Monitor
     Serial.print("Distance: ");
@@ -108,7 +118,7 @@ int measure_distance(){
 
     if (distance < SENSOR_RANGE_MIN || distance > SENSOR_RANGE_MAX) {
       Serial.println("Distance out of range.");
-      distance = 0;
+      distance = -1;
       if (retries < SENSOR_TIMEOUT) {
         delay(50); // wait for module to settle before retrying
       } 
@@ -117,29 +127,4 @@ int measure_distance(){
   }
 
   return distance;
-}
-
-void printWakeUpReason() {
-  esp_sleep_wakeup_cause_t wakeupReason = esp_sleep_get_wakeup_cause();
-
-  switch (wakeupReason) {
-    case ESP_SLEEP_WAKEUP_EXT0:
-      Serial.println("The device was awakened by an external signal using RTC_IO.");
-      break;
-    case ESP_SLEEP_WAKEUP_EXT1:
-      Serial.println("The device was awakened by an external signal using RTC_CNTL.");
-      break;
-    case ESP_SLEEP_WAKEUP_TIMER:
-      Serial.println("The device was awakened by a timer event.");
-      break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD:
-      Serial.println("The device was awakened by a touchpad interaction.");
-      break;
-    case ESP_SLEEP_WAKEUP_ULP:
-      Serial.println("The device was awakened by a ULP (Ultra-Low-Power) program.");
-      break;
-    default:
-      Serial.printf("The device woke up for an unknown reason: %d\n", wakeupReason);
-      break;
-  }
 }

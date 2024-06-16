@@ -58,7 +58,7 @@ void lora_set_config(LoRa_E220& lora_obj) {
 	configuration.OPTION.transmissionPower = POWER_22; // Device power
 
 	configuration.TRANSMISSION_MODE.enableRSSI = RSSI_DISABLED; // Enable RSSI info
-	configuration.TRANSMISSION_MODE.fixedTransmission = FT_TRANSPARENT_TRANSMISSION; // Enable repeater mode
+	configuration.TRANSMISSION_MODE.fixedTransmission = FT_FIXED_TRANSMISSION; // Enable repeater mode
 	configuration.TRANSMISSION_MODE.enableLBT = LBT_DISABLED; // Check interference
 	configuration.TRANSMISSION_MODE.WORPeriod = WOR_2000_011; // WOR timing
 	
