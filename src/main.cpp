@@ -14,8 +14,10 @@
 
 #define DESTINATION_ADDL                                  3
 
+HardwareSerial *serial_lora = &Serial2;
+
 LoRa_E220 e220ttl(
-    &Serial2,
+    serial_lora,
     PIN_E220_AUX,
     PIN_E220_M0,
     PIN_E220_M1
@@ -36,9 +38,12 @@ LoRa_E220 e220ttl(
 
 // --------------------------------- APP DATA --------------------------------- //
 
+#define TANK_ID                                          1
+
 struct tankData {
-  int tank1_level;
-  int tank2_level;
+  int tank_id;
+  int tank_level;
+  int battery_voltage;
 };
 
 tankData currentTankData = {0, 0};
@@ -65,14 +70,15 @@ void setup() {
   // ------------- send measurement ----------------- //
   e220ttl.setMode(MODE_0_NORMAL);
 
-  currentTankData.tank1_level = measure_distance();
-  currentTankData.tank2_level = 75;
+  currentTankData.tank_id = TANK_ID;
+  currentTankData.tank_level = measure_distance();
+  currentTankData.battery_voltage = 3983;           // 3.983V dummy value
   ResponseStatus rs = e220ttl.sendFixedMessage(0, DESTINATION_ADDL, 18, &currentTankData, sizeof(currentTankData));
 
 
   // ------------- go to sleep ---------------------- //
   e220ttl.setMode(MODE_2_WOR_RECEIVER);
-  Serial2.end();
+  serial_lora->end();
 
   esp_sleep_enable_ext0_wakeup(PIN_E220_AUX, LOW); 
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
