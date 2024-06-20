@@ -5,6 +5,13 @@
 #include "driver/rtc_io.h"
 
 
+// --------------------------------- battery level --------------------------------- //
+#define PIN_BATT_ADC                                      A0
+#define BATT_FULL_MV                                      4300 // milli volt
+#define BATT_EMPTY_MV                                     3700  // milli volt
+
+
+
 // --------------------------------- LoRa E220 TTL --------------------------------- //
 #define PIN_E220_AUX                                      GPIO_NUM_15
 #define PIN_E220_M0                                       GPIO_NUM_19
@@ -12,7 +19,7 @@
 
 #define SEND_INTERVAL                                     2000
 
-#define DESTINATION_ADDL                                  3
+#define DESTINATION_ADDL                                  2
 
 HardwareSerial *serial_lora = &Serial2;
 
@@ -46,7 +53,7 @@ struct tankData {
   int battery_voltage;
 };
 
-tankData currentTankData = {0, 0};
+tankData currentTankData;
  
 int measure_distance();
 
@@ -56,23 +63,36 @@ void setup() {
   // ------------- pin configuration ---------------- //
   pinMode(PIN_AJSR04M_TRIG, OUTPUT);
   pinMode(PIN_AJSR04M_ECHO, INPUT);
+  pinMode(PIN_BATT_ADC, INPUT);
   
 
   // --------------- system setup ------------------- //
   Serial.begin(9600);
+  memset(&currentTankData, 0x00, sizeof(currentTankData));
 
 
-  // --------------- lora setup --------------------- //
+
+  // ------------- battery level -------------------- //
+  int batt_adc_read_mV = analogReadMilliVolts(PIN_BATT_ADC);
+  int batt_adc_read_normal = analogRead(PIN_BATT_ADC);
+  int data_batt_voltage = map(batt_adc_read_normal, 0, 4095, 0, BATT_FULL_MV);
+
+  Serial.println("adc read mv fct: " + batt_adc_read_mV);
+  Serial.println("adc read value normal: " + batt_adc_read_normal);
+  Serial.println("mapped batt voltage: " + data_batt_voltage);
+
+  currentTankData.battery_voltage = data_batt_voltage;
+
+  
+
+  // ------------ lora send measurement -------------- //
   e220ttl.begin();
-  e220ttl.setMode(MODE_2_WOR_RECEIVER);
+  delay(100);
 
-
-  // ------------- send measurement ----------------- //
   e220ttl.setMode(MODE_0_NORMAL);
 
   currentTankData.tank_id = TANK_ID;
   currentTankData.tank_level = measure_distance();
-  currentTankData.battery_voltage = 3983;           // 3.983V dummy value
   ResponseStatus rs = e220ttl.sendFixedMessage(0, DESTINATION_ADDL, 18, &currentTankData, sizeof(currentTankData));
 
 
@@ -86,7 +106,7 @@ void setup() {
 
   esp_deep_sleep_start();
   delay(100);
-  Serial.println("This will never be printed");
+  Serial.println("If you see this, the mcu is not sleeping!");
 }
  
 void loop() {}
@@ -101,10 +121,9 @@ int measure_distance(){
   int retries = 0;
 
   // Clears the trigPin condition
-  digitalWrite(PIN_AJSR04M_TRIG, LOW);  //
+  digitalWrite(PIN_AJSR04M_TRIG, LOW);
   delayMicroseconds(2);
 
-  // retry measurement until it is within acceptable range or until timeout is reached
   while((distance < SENSOR_RANGE_MIN || distance > SENSOR_RANGE_MAX) &&
         retries <= SENSOR_TIMEOUT) {
   
@@ -113,11 +132,9 @@ int measure_distance(){
     delayMicroseconds(1000);
     digitalWrite(PIN_AJSR04M_TRIG, LOW);
 
-    // Reads the echoPin, returns the sound wave travel time in microseconds
     duration = pulseIn(PIN_AJSR04M_ECHO, HIGH);
     distance = duration * 0.034 / 2; // Speed of sound wave divided by 2 (there and back)
 
-    // Displays the distance on the Serial Monitor
     Serial.print("Distance: ");
     Serial.print(distance);
     Serial.println(" cm");
@@ -126,7 +143,7 @@ int measure_distance(){
       Serial.println("Distance out of range.");
       distance = -1;
       if (retries < SENSOR_TIMEOUT) {
-        delay(50); // wait for module to settle before retrying
+        delay(50);
       } 
     }
     ++retries;
