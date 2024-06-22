@@ -3,19 +3,41 @@
 #include "soc/rtc_cntl_reg.h"
 #include "soc/rtc.h"
 #include "driver/rtc_io.h"
+#include "esp_adc_cal.h"
 
 
 // --------------------------------- battery level --------------------------------- //
-#define PIN_BATT_ADC                                      A0
+#define PIN_BATT_ADC                                      ADC1_CHANNEL_6
 #define BATT_FULL_MV                                      4300 // milli volt
 #define BATT_EMPTY_MV                                     3700  // milli volt
+
+int _readBattery() {
+  uint32_t value = 0;
+  int rounds = 11;
+  esp_adc_cal_characteristics_t adc_chars;
+
+  //battery voltage divided by 2 can be measured at GPIO34, which equals ADC1_CHANNEL6
+  adc1_config_width(ADC_WIDTH_BIT_12);
+  adc1_config_channel_atten(PIN_BATT_ADC, ADC_ATTEN_DB_11);
+  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &adc_chars);
+
+  //to avoid noise, sample the pin several times and average the result
+  for(int i=1; i<=rounds; i++)
+    value += adc1_get_raw(PIN_BATT_ADC);
+  
+  value /= (uint32_t)rounds;
+
+  //due to the voltage divider (1M+1M) values must be multiplied by 2
+  //and convert mV to V
+  return esp_adc_cal_raw_to_voltage(value, &adc_chars)*2.0;
+}
 
 
 
 // --------------------------------- LoRa E220 TTL --------------------------------- //
-#define PIN_E220_AUX                                      GPIO_NUM_15
+#define PIN_E220_AUX                                      GPIO_NUM_4
 #define PIN_E220_M0                                       GPIO_NUM_19
-#define PIN_E220_M1                                       GPIO_NUM_21
+#define PIN_E220_M1                                       GPIO_NUM_12
 
 #define SEND_INTERVAL                                     2000
 
@@ -38,8 +60,8 @@ LoRa_E220 e220ttl(
 #define SENSOR_RANGE_MAX                                  450
 #define SENSOR_TIMEOUT                                    3
 
-#define PIN_AJSR04M_ECHO                                  5
-#define PIN_AJSR04M_TRIG                                  4
+#define PIN_AJSR04M_ECHO                                  25
+#define PIN_AJSR04M_TRIG                                  26
 
 
 
@@ -55,7 +77,7 @@ struct tankData {
 
 tankData currentTankData;
  
-int measure_distance();
+int _measure_distance();
 
 
 
@@ -71,19 +93,9 @@ void setup() {
   memset(&currentTankData, 0x00, sizeof(currentTankData));
 
 
-
   // ------------- battery level -------------------- //
-  int batt_adc_read_mV = analogReadMilliVolts(PIN_BATT_ADC);
-  int batt_adc_read_normal = analogRead(PIN_BATT_ADC);
-  int data_batt_voltage = map(batt_adc_read_normal, 0, 4095, 0, BATT_FULL_MV);
+  currentTankData.battery_voltage = _readBattery();
 
-  Serial.println("adc read mv fct: " + batt_adc_read_mV);
-  Serial.println("adc read value normal: " + batt_adc_read_normal);
-  Serial.println("mapped batt voltage: " + data_batt_voltage);
-
-  currentTankData.battery_voltage = data_batt_voltage;
-
-  
 
   // ------------ lora send measurement -------------- //
   e220ttl.begin();
@@ -92,7 +104,7 @@ void setup() {
   e220ttl.setMode(MODE_0_NORMAL);
 
   currentTankData.tank_id = TANK_ID;
-  currentTankData.tank_level = measure_distance();
+  currentTankData.tank_level = _measure_distance();
   ResponseStatus rs = e220ttl.sendFixedMessage(0, DESTINATION_ADDL, 18, &currentTankData, sizeof(currentTankData));
 
 
@@ -115,7 +127,7 @@ void loop() {}
 
 
 
-int measure_distance(){
+int _measure_distance(){
   int duration = 0;
   int distance = 0;
   int retries = 0;
