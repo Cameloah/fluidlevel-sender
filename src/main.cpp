@@ -28,7 +28,6 @@ int _readBattery() {
   value /= (uint32_t)rounds;
 
   //due to the voltage divider (1M+1M) values must be multiplied by 2
-  //and convert mV to V
   return esp_adc_cal_raw_to_voltage(value, &adc_chars)*2.0;
 }
 
