@@ -20,7 +20,7 @@
  */
 
 
-// #define FREQUENCY_868
+#define FREQUENCY_868
 #define LoRa_E220_DEBUG
 
 #include "lora_config.h"
@@ -44,7 +44,7 @@ void lora_set_config(LoRa_E220& lora_obj) {
 
 
 
-	configuration.ADDL = 0x02;  // First part of address
+	configuration.ADDL = 0x04;  // First part of address
 	configuration.ADDH = 0x00; // Second part
 
 	configuration.CHAN = 18; // Communication channel
@@ -78,15 +78,16 @@ void lora_get_config(LoRa_E220& lora_obj) {
 	
 	ResponseStructContainer c;
 	c = lora_obj.getConfiguration();
-	// It's important get configuration pointer before all other operation
-	Configuration configuration = *(Configuration*) c.data;
 	Serial.println(c.status.getResponseDescription());
 	Serial.println(c.status.code);
+	if (c.status.code != E220_SUCCESS) {
+		return;
+		c.close();
+	}
 
+	// It's important get configuration pointer before all other operation
+	Configuration configuration = *(Configuration*) c.data;
 	_printParameters(configuration);
-
-
-
 
 	c.close();
 }

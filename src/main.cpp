@@ -1,3 +1,5 @@
+#include "Arduino.h"
+
 #include "main.h"
 
 #include "soc/rtc_cntl_reg.h"
@@ -35,10 +37,8 @@ int _readBattery() {
 
 // --------------------------------- LoRa E220 TTL --------------------------------- //
 #define PIN_E220_AUX                                      GPIO_NUM_4
-#define PIN_E220_M0                                       GPIO_NUM_19
+#define PIN_E220_M0                                       GPIO_NUM_13
 #define PIN_E220_M1                                       GPIO_NUM_12
-
-#define SEND_INTERVAL                                     2000
 
 #define DESTINATION_ADDL                                  2
 
@@ -59,14 +59,14 @@ LoRa_E220 e220ttl(
 #define SENSOR_RANGE_MAX                                  450
 #define SENSOR_TIMEOUT                                    3
 
-#define PIN_AJSR04M_ECHO                                  25
-#define PIN_AJSR04M_TRIG                                  26
+#define PIN_AJSR04M_ECHO                                  26
+#define PIN_AJSR04M_TRIG                                  25
 
 
 
 // --------------------------------- APP DATA --------------------------------- //
 
-#define TANK_ID                                          1
+#define TANK_ID                                          2
 
 struct tankData {
   int tank_id;
@@ -84,7 +84,6 @@ void setup() {
   // ------------- pin configuration ---------------- //
   pinMode(PIN_AJSR04M_TRIG, OUTPUT);
   pinMode(PIN_AJSR04M_ECHO, INPUT);
-  pinMode(PIN_BATT_ADC, INPUT);
   
 
   // --------------- system setup ------------------- //
@@ -99,13 +98,12 @@ void setup() {
   // ------------ lora send measurement -------------- //
   e220ttl.begin();
   delay(100);
-
+  
   e220ttl.setMode(MODE_0_NORMAL);
 
   currentTankData.tank_id = TANK_ID;
   currentTankData.tank_level = _measure_distance();
   ResponseStatus rs = e220ttl.sendFixedMessage(0, DESTINATION_ADDL, 18, &currentTankData, sizeof(currentTankData));
-
 
   // ------------- go to sleep ---------------------- //
   e220ttl.setMode(MODE_2_WOR_RECEIVER);
