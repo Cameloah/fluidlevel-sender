@@ -71,6 +71,7 @@ LoRa_E220 e220ttl(
 struct tankData {
   int tank_id;
   int tank_level;
+  unsigned long int timestamp;
   int battery_voltage;
 };
 
@@ -90,6 +91,8 @@ void setup() {
   Serial.begin(9600);
   memset(&currentTankData, 0x00, sizeof(currentTankData));
 
+  unsigned long now = time(NULL);
+  currentTankData.timestamp = now / 60;
 
   // ------------- battery level -------------------- //
   currentTankData.battery_voltage = _readBattery();
@@ -98,7 +101,7 @@ void setup() {
   // ------------ lora send measurement -------------- //
   e220ttl.begin();
   delay(100);
-  
+
   e220ttl.setMode(MODE_0_NORMAL);
 
   currentTankData.tank_id = TANK_ID;
